@@ -1,0 +1,209 @@
+
+# Normalization analysis of Pfizer data plus pretty plots
+# 5-14-24
+
+library(MSstats)
+library(MSstatsTMT)
+library(tidyverse)
+library(data.table)
+
+setwd("/scratch/kohler.d/pfizer")
+
+
+# Load Data --------------------------------------------------------------------
+# No RTS
+evidence = read.csv("TMT/dasatinib_tmt_sps_ms3/NEU_dasatinib_TMT_SPS_MS3_PSMs.txt", sep="\t")
+annotation = read.csv("TMT/dasatinib_tmt_sps_ms3/msstats_sample_annot.txt", sep="\t")
+tmt_input = PDtoMSstatsTMTFormat(evidence, annotation)
+
+# Normalization analysis
+tmt_norm = proteinSummarization(tmt_input, global_norm = TRUE)
+tmt_no_norm = proteinSummarization(tmt_input, global_norm = FALSE)
+
+dataProcessPlotsTMT(tmt_norm,
+                     type="QCPlot",
+                    ylimUp = 12,
+                    ylimDown = 0,
+                     which.Protein = "allonly",
+                     address=FALSE)
+dataProcessPlotsTMT(tmt_no_norm,
+                    type="QCPlot",
+                    ylimUp = 12,
+                    ylimDown = 0,
+                    which.Protein = "allonly",
+                    address=FALSE)
+
+dataProcessPlotsTMT(tmt_norm,
+                    type="ProfilePlot",
+                    # ylimUp = 12,
+                    # ylimDown = 0,
+                    originalPlot = FALSE,
+                    which.Protein = "P12931",
+                    address=FALSE)
+dataProcessPlotsTMT(tmt_no_norm,
+                    type="ProfilePlot",
+                    ylimUp = 12,
+                    ylimDown = 0,
+                    originalPlot = FALSE,
+                    which.Protein = "P12931",
+                    address=FALSE)
+
+tmt_norm_model = groupComparisonTMT(tmt_norm)
+tmt_no_norm_model = groupComparisonTMT(tmt_no_norm)
+
+tmt_norm_model$ComparisonResult %>%
+  filter(Label == "DMSO_0 vs Dasatinib_300nM" & adj.pvalue < .05)
+
+tmt_no_norm_model$ComparisonResult %>%
+  filter(Label == "DMSO_0 vs Dasatinib_300nM" & adj.pvalue < .05)
+
+# RTS
+evidence = read.csv("TMT/dasatinib_tmt_sps_rts_ms3/NEU_dasatinib_TMT_RTS_SPS_MS3_F_PSMs.txt", sep="\t")
+annotation = read.csv("TMT/dasatinib_tmt_sps_rts_ms3/msstats_sample_annot.txt", sep="\t")
+tmt_input = PDtoMSstatsTMTFormat(evidence, annotation)
+
+# Normalization analysis
+tmt_norm = proteinSummarization(tmt_input, global_norm = TRUE)
+tmt_no_norm = proteinSummarization(tmt_input, global_norm = FALSE)
+
+dataProcessPlotsTMT(tmt_norm,
+                    type="QCPlot",
+                    ylimUp = 12,
+                    ylimDown = 0,
+                    which.Protein = "allonly",
+                    address=FALSE)
+dataProcessPlotsTMT(tmt_no_norm,
+                    type="QCPlot",
+                    ylimUp = 12,
+                    ylimDown = 0,
+                    which.Protein = "allonly",
+                    address=FALSE)
+
+dataProcessPlotsTMT(tmt_norm,
+                    type="ProfilePlot",
+                    # ylimUp = 12,
+                    # ylimDown = 0,
+                    originalPlot = FALSE,
+                    which.Protein = "P12931",
+                    address=FALSE)
+dataProcessPlotsTMT(tmt_no_norm,
+                    type="ProfilePlot",
+                    ylimUp = 12,
+                    ylimDown = 0,
+                    originalPlot = FALSE,
+                    which.Protein = "P12931",
+                    address=FALSE)
+
+
+# DIA --------------------------------------------------------------------------
+# Takes forever to run F
+dia = fread("20240311_135351_Chemoproteomics Dasatinib DIA_MSstats_Report.tsv", sep="\t")
+dia_input = SpectronauttoMSstatsFormat(dia)
+
+dia_input[dia_input$Intensity == 0, "Intensity"] = NA
+
+dia_top_3 = dataProcess(dia_input, featureSubset = "topN",
+                       n_top_feature = 3, numberOfCores=4)
+# save(dia_top_5, file="top5.rda")
+load(file="top5.rda")
+
+save(dia_top_3, file="top3.rda")
+load(file="top3.rda")
+dia_all = dataProcess(dia_input, featureSubset = "all",
+                      numberOfCores=4)
+# save(dia_all, file="All.rda")
+load(file="All.rda")
+
+
+# dia_best = dataProcess(dia_input, featureSubset = "highQuality",
+#                        remove_uninformative_feature_outlier=TRUE,
+#                        numberOfCores=4)
+# save(dia_best, file="Best.rda")
+
+
+unique(dia_top_3$ProteinLevelData$GROUP)
+
+dia_top_3$ProteinLevelData$GROUP = factor(
+  dia_top_3$ProteinLevelData$GROUP,
+  levels=c("DMSO", "Dasatinib_001nM",
+          "Dasatinib_003nM", "Dasatinib_010nM",
+          "Dasatinib_030nM", "Dasatinib_100nM", "Dasatinib_300nM",
+          "Dasatinib_001uM", "Dasatinib_003uM")
+  )
+
+
+dia_top_3$FeatureLevelData$GROUP = factor(
+  dia_top_3$FeatureLevelData$GROUP,
+  levels=c("DMSO", "Dasatinib_001nM",
+           "Dasatinib_003nM", "Dasatinib_010nM",
+           "Dasatinib_030nM", "Dasatinib_100nM", "Dasatinib_300nM",
+           "Dasatinib_001uM", "Dasatinib_003uM")
+)
+
+
+dataProcessPlots(dia_top_3,
+                 type="ProfilePlot",
+                 which.Protein="P12931",
+                 featureName = "NA",
+                 ylimUp = 12,
+                 ylimDown = 0,
+                 address=FALSE)
+
+dataProcessPlots(dia_all,
+                 type="ProfilePlot",
+                 which.Protein="P12931",
+                 address=FALSE)
+
+dataProcessPlots(dia_all,
+                 type="QCPlot",
+                 which.Protein="allonly",
+                 text.size = 4,
+                 address=FALSE)
+
+O15533
+
+O00258
+labels = unique(dia_all$ProteinLevelData$GROUP)
+contrast.matrix = MSstatsContrastMatrix('pairwise', labels)
+
+top5_model = groupComparison(
+  contrast.matrix=contrast.matrix,
+  data=dia_top_5)
+save(top5_model, file="top5_model.rda")
+
+all_model = groupComparison(
+  contrast.matrix=contrast.matrix,
+  data=dia_all)
+save(all_model, file="all_model.rda")
+
+# Targeted ---------------------------------------------------------------------
+targeted_input = readxl::read_excel("Targeted/20240215_NEU_TargLCMS_areas.xlsx")
+
+# If you want to test non-reference norm you can remove the heavy
+# targeted_input = targeted_input %>% filter(IsotopeLabelType == "light")
+targeted_norm = dataProcess(targeted_input)
+targeted_no_norm = dataProcess(targeted_input,
+                               normalization = FALSE)
+
+dataProcessPlots(targeted_norm,
+                 type="ProfilePlot",
+                 which.Protein = "CSK_Hsap",
+                 originalPlot = FALSE,
+                 address=FALSE)
+
+dataProcessPlots(targeted_no_norm,
+                 type="ProfilePlot",
+                 which.Protein = "CSK_Hsap",
+                 originalPlot = FALSE,
+                 address=FALSE)
+
+dataProcessPlots(targeted_no_norm,
+                 type="QCPlot",
+                 which.Protein = "allonly",
+                 address=FALSE)
+dataProcessPlots(targeted_norm,
+                 type="QCPlot",
+                 which.Protein = "allonly",
+                 address=FALSE)
+
+

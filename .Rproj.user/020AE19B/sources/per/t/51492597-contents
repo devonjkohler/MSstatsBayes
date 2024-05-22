@@ -1,0 +1,109 @@
+
+##############################
+#### Analysis in MSstats
+##############################
+
+##############################
+## Load MSstats package
+##############################
+library(MSstats)
+
+##############################
+## Read data
+##############################
+raw <- read.csv("ControlMixture_SRM_input.csv")
+annotation <- read.csv("ControlMixture_SRM_annotation.csv")
+head(raw)
+head(annotation)
+
+
+##############################
+## It is already formatted
+##############################
+quant <- raw
+
+## count the number of proteins
+length(unique(quant$ProteinName)) # 24
+
+
+dataProcessBayes(quant)
+
+##############################
+## dataProcess
+## including Normalization, decide censored cutoff, protein-level summarization
+##############################
+
+processed.quant <- dataProcess(quant,
+                               normalization = 'equalizeMedians',
+                               summaryMethod="TMP",
+                               censoredInt="NA",
+                               MBimpute=TRUE,
+                               maxQuantileforCensored=0.999)
+
+save(processed.quant, file='processed.quant.rda')
+
+##############################
+## Data visualization
+##############################
+
+dataProcessPlots(processed.quant, type="QCplot",
+                 ylimDown=0,
+                 which.Protein = 'allonly',
+                 width=7, height=7,
+                 address="ControlMixture_SRM_")
+
+dataProcessPlots(processed.quant, type="Profileplot",
+                 ylimDown=0,
+                 originalPlot = TRUE,
+                 summaryPlot = TRUE,
+                 width=7, height=7,
+                 address="ControlMixture_SRM_")
+
+dataProcessPlots(processed.quant, type="Conditionplot",
+                 ylimDown=0,
+                 width=7, height=7,
+                 address="ControlMixture_SRM_")
+
+
+##############################
+## Model-based comparison + adjust p-value
+##############################
+
+comparison1<-matrix(c(1,-1,0,0,0),nrow=1)
+comparison2<-matrix(c(1,0,-1,0,0),nrow=1)
+comparison3<-matrix(c(1,0,0,-1,0),nrow=1)
+comparison4<-matrix(c(1,0,0,0,-1),nrow=1)
+comparison5<-matrix(c(0,1,-1,0,0),nrow=1)
+comparison6<-matrix(c(0,1,0,-1,0),nrow=1)
+comparison7<-matrix(c(0,1,0,0,-1),nrow=1)
+comparison8<-matrix(c(0,0,1,-1,0),nrow=1)
+comparison9<-matrix(c(0,0,1,0,-1),nrow=1)
+comparison10<-matrix(c(0,0,0,1,-1),nrow=1)
+comparison<-rbind(comparison1,comparison2, comparison3, comparison4, comparison5,
+                  comparison6, comparison7, comparison8, comparison9, comparison10)
+row.names(comparison)<-c("M1-M2", "M1-M3", "M1-M4", "M1-M5", "M2-M3",
+                         "M2-M4", "M2-M5", "M3-M4", "M3-M5", "M4-M5")
+
+
+test.MSstats <- groupComparison(contrast.matrix=comparison, data=processed.quant)
+test.MSstats <- test.MSstats$ComparisonResult
+
+##############################
+## save the result
+##############################
+
+save(test.MSstats, file='test.MSstats.rda')
+write.csv(test.MSstats, file='ControlMixture_SRM_testResult_byMSstats.csv')
+
+
+##############################
+## Visualization of result
+##############################
+groupComparisonPlots(data=test.MSstats, type="VolcanoPlot",
+                     width=6, height=6,
+                     address="ControlMixture_SRM_")
+
+groupComparisonPlots(data=test.MSstats, type="ComparisonPlot",
+                     width=6, height=6,
+                     address="ControlMixture_SRM_")
+
