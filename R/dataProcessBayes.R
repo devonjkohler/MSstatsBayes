@@ -37,8 +37,8 @@ dataProcessBayes <- function(data,
 
   summarized_results = MSstatsBayesSummarize(input, dpc_betas)
 
-  MSstatsBayesSummarizationOutput
+  output = MSstatsBayesSummarizationOutput(summarized_results, input)
 
-  return(summarized_results)
+  return(output)
 
 }

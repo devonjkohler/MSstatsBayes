@@ -1,5 +1,5 @@
 #' @importFrom protDP dpc
-#' @importFrom data.table ":="
+#' @importFrom data.table ":=" uniqueN setnames
 #' @importFrom MASS fitdistr
 #' @import tidyverse
 #' @import cmdstanr
@@ -39,7 +39,20 @@ MSstatsBayesSummarize = function(data, dpc_betas,
   stan_file = system.file("stan", "missing_model.stan", package="MSstatsBayes")
 
   # Model
-  model = cmdstan_model(stan_file)
+  # suppressWarnings({
+
+  # path_to_opencl_lib <- "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v10.2\\lib\\x64\\"
+  # cpp_options = list(
+  #   paste0("LDFLAGS+= -L\"",path_to_opencl_lib,"\" -lOpenCL")
+  # )
+  #
+  # cmdstanr::cmdstan_make_local(cpp_options = cpp_options)
+  # cmdstanr::rebuild_cmdstan()
+
+  model = cmdstan_model(stan_file)#, force_recompile=TRUE,
+                          # cpp_options = list(stan_opencl = TRUE,
+                          #                    paste0("LDFLAGS+= -L\"",path_to_opencl_lib,"\" -lOpenCL")))
+  # })
 
   fit = model$sample(
     data = stan_input,
@@ -47,7 +60,8 @@ MSstatsBayesSummarize = function(data, dpc_betas,
     chains = 4,
     parallel_chains = 4,
     refresh = 500 # print update every 500 iters
-  )
+    # opencl_ids = c(0, 0), refresh = 0
+    )
 
   # if (bayes_method == "MCMC"){
   #   fit = stan(file = stan_file, data = stan_input,
@@ -65,7 +79,7 @@ MSstatsBayesSummarize = function(data, dpc_betas,
 
 
 
-MSstatsBayesSummarizationOutput = function(input, summarized){
+MSstatsBayesSummarizationOutput = function(summarized, input){
 
   # Define feature and protein data
   feature_data = input
@@ -86,8 +100,11 @@ MSstatsBayesSummarizationOutput = function(input, summarized){
   feature_data[imp_sd == 0, imp_sd:=NA]
 
   # Calculate summary stats for protein level data
+  feature_data[, total_features := uniqueN(FEATURE), by = PROTEIN]
+  feature_data[,"censored"] = !is.na(feature_data[,"imp_mean"])
   summary_stats = feature_data
-  summary_stats[, NonMissingStats := .getNonMissingFilterStats(.SD, NULL)]
+  summary_stats[, NonMissingStats := MSstats:::.getNonMissingFilterStats(
+    .SD, NULL)]
   summary_stats[, NumMeasuredFeature := sum(NonMissingStats),
                 by = c("PROTEIN", "RUN")]
   summary_stats[, MissingPercentage := 1 - (NumMeasuredFeature / total_features)]
@@ -108,6 +125,9 @@ MSstatsBayesSummarizationOutput = function(input, summarized){
            c("GROUP_ORIGINAL", "SUBJECT_ORIGINAL", "imp_mean", "imp_sd"),
            c("GROUP", "SUBJECT", "predicted", "predicted_sd"))
 
+  feature_data[, newABUNDANCE := ifelse(!is.na(ABUNDANCE),
+                                        ABUNDANCE, predicted)]
+
   feature_data = feature_data[, c("PROTEIN", "PEPTIDE", "TRANSITION",
                                   "FEATURE", "LABEL", "GROUP", "RUN",
                                   "SUBJECT", "FRACTION", "originalRUN",
@@ -117,7 +137,7 @@ MSstatsBayesSummarizationOutput = function(input, summarized){
 
 
   # Add run level summarization
-  summary_cols = c("PROTEIN_original", "RUN_original", "run_mean", "run_sd")
+  summary_cols = c("PROTEIN_original", "RUN_original", "summarized", "errors")
   protein_data = merge(unique(protein_data[, ..summary_cols]),
                        unique(input[, c("PROTEIN", "RUN", "originalRUN",
                                         "GROUP_ORIGINAL", "SUBJECT_ORIGINAL")]
@@ -143,7 +163,7 @@ MSstatsBayesSummarizationOutput = function(input, summarized){
 
   setnames(protein_data,
            c("PROTEIN_original", "GROUP_ORIGINAL", "RUN_original",
-             "run_mean", "run_sd", "SUBJECT_ORIGINAL", "V1"),
+             "summarized", "errors", "SUBJECT_ORIGINAL", "V1"),
            c("Protein", "GROUP", "RUN", "LogIntensities",
              "LogIntensities_sd", "SUBJECT", "TotalGroupMeasurements"))
 
@@ -366,14 +386,14 @@ recover_data = function(fit, feature_data, missing_runs){
   # parameters = c("run", "sigma", "beta0", "beta1")#"obs_mis",
 
   # Missing imputation
-  # results = rstan::summary(fit, pars="obs_mis")
-  # results = results$summary[,c("mean", "sd")]
-  # imp_index = which(is.na(feature_data$ABUNDANCE))
+  results = fit$summary()[grepl("y_impute\\[", fit$summary()$variable),
+                          c("mean", "sd")]
+  imp_index = which(is.na(feature_data$ABUNDANCE))
 
   feature_data[, "imp_mean"] = 0
   feature_data[, "imp_sd"] = 0
-  # feature_data[imp_index, "imp_mean" := results[,1]]
-  # feature_data[imp_index, "imp_sd" := results[,2]]
+  feature_data[imp_index, "imp_mean" := results[,1]]
+  feature_data[imp_index, "imp_sd" := results[,2]]
 
 
   # Feature estimation
@@ -398,10 +418,10 @@ recover_data = function(fit, feature_data, missing_runs){
 
   # beta0 = rstan::summary(fit, pars="beta0")
   # beta1 = rstan::summary(fit, pars="beta1")
-  run = rstan::summary(fit, pars="run")
-  feature = rstan::summary(fit, pars="feature")
+  # run = rstan::summary(fit, pars="run")
+  # feature = rstan::summary(fit, pars="feature")
   # obs_mis = rstan::summary(fit, pars="obs_mis")
-  sigma = rstan::summary(fit, pars="sigma")
+  # sigma = rstan::summary(fit, pars="sigma")
 
   return(feature_data)
     # list(result_df = feature_data,
